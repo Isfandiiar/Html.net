@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Diagnostic v3.1</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #050505; 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            color: white;
+        }
+
+        .card {
+            background-color: #0d1117; 
+            width: 330px;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(0, 123, 255, 0.2);
+            border: 1px solid rgba(0, 123, 255, 0.3);
+            text-align: center;
+            padding-bottom: 30px;
+            padding-top: 30px; 
+        }
+
+        .content { padding: 20px; }
+
+        .info-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 90%;
+            margin: 0 auto 10px auto;
+            height: 45px;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .btn-blue {
+            background-color: #007bff;
+            color: white;
+            box-shadow: 0 4px 10px rgba(0, 123, 255, 0.3);
+        }
+
+        .flash {
+            background-color: #ffffff !important;
+            color: #007bff !important;
+        }
+
+        .btn-dark {
+            background-color: #161b22;
+            color: #007bff;
+            border: 1px solid rgba(0, 123, 255, 0.2);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <div class="content">
+            <div id="session-container" class="info-button btn-blue">
+                <span>SESSION ID: </span>
+                <span id="session-id" style="margin-left:8px; font-family:monospace;">...</span>
+            </div>
+
+            <div class="info-button btn-dark">
+                <span>LOCAL IP: </span>
+                <span id="local-ip" style="margin-left:8px; font-family:monospace;">Searching...</span>
+            </div>
+
+            <div class="info-button btn-dark">
+                <span>PUBLIC IP: </span>
+                <span id="public-ip" style="margin-left:8px; font-family:monospace;">Fetching...</span>
+            </div>
+
+            <div class="info-button btn-dark">
+                <span>ROUTER IP: </span>
+                <span id="router-ip" style="margin-left:8px; font-family:monospace;">Detecting...</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const UPDATE_INTERVAL = 300000;
+
+        function generateSessionID() {
+            let result = '';
+            for (let i = 0; i < 12; i++) { result += Math.floor(Math.random() * 10); }
+            localStorage.setItem('session_id', result);
+            localStorage.setItem('session_timestamp', Date.now());
+            updateDisplay(result);
+        }
+
+        function updateDisplay(id) {
+            const element = document.getElementById('session-id');
+            const container = document.getElementById('session-container');
+            element.textContent = id;
+            container.classList.add('flash');
+            setTimeout(() => container.classList.remove('flash'), 500);
+        }
+
+        function checkAndLoadSession() {
+            const storedID = localStorage.getItem('session_id');
+            const storedTime = localStorage.getItem('session_timestamp');
+            const now = Date.now();
+            if (storedID && storedTime && (now - storedTime < UPDATE_INTERVAL)) {
+                updateDisplay(storedID);
+                setTimeout(() => {
+                    generateSessionID();
+                    setInterval(generateSessionID, UPDATE_INTERVAL);
+                }, UPDATE_INTERVAL - (now - storedTime));
+            } else {
+                generateSessionID();
+                setInterval(generateSessionID, UPDATE_INTERVAL);
+            }
+        }
+
+        function findIPs() {
+            try {
+                const pc = new RTCPeerConnection({iceServers: []});
+                pc.createDataChannel("");
+                pc.createOffer().then(offer => pc.setLocalDescription(offer));
+                pc.onicecandidate = (ice) => {
+                    if (!ice || !ice.candidate || !ice.candidate.candidate) return;
+                    const ipMatch = /([0-9]{1,3}(\.[0-9]{1,3}){3})/.exec(ice.candidate.candidate);
+                    if (ipMatch) {
+                        const ip = ipMatch[1];
+                        if(ip !== "0.0.0.0") {
+                            document.getElementById('local-ip').textContent = ip;
+                            const parts = ip.split('.');
+                            if (parts.length === 4) {
+                                document.getElementById('router-ip').textContent = `${parts[0]}.${parts[1]}.${parts[2]}.1`;
+                            }
+                        }
+                    }
+                    pc.onicecandidate = () => {};
+                };
+            } catch(e) {}
+            setTimeout(() => {
+                if(document.getElementById('local-ip').textContent === "Searching...") {
+                    document.getElementById('local-ip').textContent = "127.0.0.1";
+                    document.getElementById('router-ip').textContent = "192.168.1.1";
+                }
+            }, 3000);
+        }
+
+        async function getPublicIP() {
+            try {
+                const response = await fetch('https://api.ipify.org?format=json');
+                const data = await response.json();
+                document.getElementById('public-ip').textContent = data.ip;
+            } catch (error) {
+                document.getElementById('public-ip').textContent = "Unavailable";
+            }
+        }
+
+        checkAndLoadSession();
+        findIPs();
+        getPublicIP();
+    </script>
+</body>
+</html>
