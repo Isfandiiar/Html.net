@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>System Diagnostic v3.6</title>
+    <title>System Diagnostic v4.1</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -18,16 +18,14 @@
 
         .card {
             background-color: #0d1117; 
-            width: 330px;
+            width: 350px;
             border-radius: 16px;
-            overflow: hidden;
             box-shadow: 0 0 20px rgba(0, 123, 255, 0.2);
             border: 1px solid rgba(0, 123, 255, 0.3);
             text-align: center;
             padding: 30px 20px;
         }
 
-        /* Speedtest oben */
         .gauge-container {
             position: relative;
             width: 180px;
@@ -35,18 +33,8 @@
             margin: 0 auto 10px;
         }
 
-        .gauge-svg {
-            width: 100%;
-            height: 100%;
-        }
-
-        .gauge-bg {
-            fill: none;
-            stroke: #161b22;
-            stroke-width: 12;
-            stroke-linecap: round;
-        }
-
+        .gauge-svg { width: 100%; height: 100%; }
+        .gauge-bg { fill: none; stroke: #161b22; stroke-width: 12; stroke-linecap: round; }
         .gauge-progress {
             fill: none;
             stroke: #007bff;
@@ -54,28 +42,26 @@
             stroke-linecap: round;
             stroke-dasharray: 283;
             stroke-dashoffset: 283;
-            transition: stroke-dashoffset 0.5s cubic-bezier(0.1, 0.5, 0.1, 1);
+            transition: stroke-dashoffset 0.3s ease;
         }
 
-        .speed-value {
-            position: absolute;
-            bottom: 0;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 2.2rem;
-            font-weight: bold;
-            color: #007bff;
-        }
-
-        .unit {
-            font-size: 0.8rem;
-            color: #8b949e;
+        .results-grid {
+            display: flex;
+            justify-content: space-between;
             margin-bottom: 25px;
-            display: block;
-            font-weight: 500;
+            padding: 15px 0;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
 
-        /* Info-Bereich unten */
+        .result-item { flex: 1; text-align: center; }
+        .speed-value { font-size: 1.6rem; font-weight: bold; display: block; }
+        .unit { font-size: 0.7rem; color: #8b949e; font-weight: 500; }
+
+        .ping-text { color: #f1c40f; } 
+        .down-text { color: #007bff; } 
+        .up-text { color: #2ecc71; }   
+
         .info-button {
             display: flex;
             align-items: center;
@@ -88,10 +74,7 @@
             background-color: #161b22;
             color: #007bff;
             border: 1px solid rgba(0, 123, 255, 0.2);
-            transition: background-color 0.3s;
         }
-
-        .flash { background-color: #ffffff !important; color: #007bff !important; }
 
         .btn-action {
             background-color: #007bff;
@@ -101,18 +84,12 @@
             font-weight: bold;
             box-shadow: 0 4px 10px rgba(0, 123, 255, 0.3);
             margin-bottom: 20px;
+            text-transform: uppercase;
         }
 
         .btn-action:disabled { background-color: #30363d; color: #8b949e; cursor: wait; }
-
-        .label { margin-right: 8px; color: #8b949e; font-weight: normal; }
+        .label { margin-right: 8px; color: #8b949e; }
         .value { font-family: monospace; }
-        
-        hr {
-            border: 0;
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-            margin: 10px 0 20px 0;
-        }
     </style>
 </head>
 <body>
@@ -123,79 +100,37 @@
                 <path class="gauge-bg" d="M20,100 A80,80 0 0,1 180,100" />
                 <path id="progress-bar" class="gauge-progress" d="M20,100 A80,80 0 0,1 180,100" />
             </svg>
-            <div id="speed-display" class="speed-value">0</div>
         </div>
-        <span class="unit">Mbps Download</span>
 
-        <button id="start-btn" class="info-button btn-action" onclick="runSpeedTest()">
-            START TEST
+        <div class="results-grid">
+            <div class="result-item">
+                <span id="ping-val" class="speed-value ping-text">0</span>
+                <span class="unit">ms LATENZ</span>
+            </div>
+            <div class="result-item">
+                <span id="down-val" class="speed-value down-text">0.0</span>
+                <span class="unit">Mbit/s DN</span>
+            </div>
+            <div class="result-item">
+                <span id="up-val" class="speed-value up-text">0.0</span>
+                <span class="unit">Mbit/s UP</span>
+            </div>
+        </div>
+
+        <button id="start-btn" class="info-button btn-action" onclick="runSpeedtest()">
+            SPEEDTEST STARTEN
         </button>
 
-        <hr>
-
-        <div id="session-container" class="info-button">
-            <span class="label">SESSION:</span>
-            <span id="session-id" class="value">...</span>
-        </div>
-
-        <div class="info-button">
-            <span class="label">LOCAL IP:</span>
-            <span id="local-ip" class="value">Searching...</span>
-        </div>
-
-        <div class="info-button">
-            <span class="label">PUBLIC IP:</span>
-            <span id="public-ip" class="value">Fetching...</span>
-        </div>
-
-        <div class="info-button">
-            <span class="label">ROUTER IP:</span>
-            <span id="router-ip" class="value">Detecting...</span>
-        </div>
+        <div class="info-button"><span class="label">SESSION:</span><span id="session-id" class="value">...</span></div>
+        <div class="info-button"><span class="label">LOCAL IP:</span><span id="local-ip" class="value">Suche...</span></div>
+        <div class="info-button"><span class="label">ROUTER IP:</span><span id="router-ip" class="value">Detecting...</span></div>
+        <div class="info-button"><span class="label">PUBLIC IP:</span><span id="public-ip" class="value">Lade...</span></div>
     </div>
 
     <script>
-        const UPDATE_INTERVAL = 300000; // 5 Minuten
-
-        // --- SESSION LOGIK ---
-        function generateSessionID() {
-            let result = '';
-            for (let i = 0; i < 12; i++) { result += Math.floor(Math.random() * 10); }
-            localStorage.setItem('session_id', result);
-            localStorage.setItem('session_timestamp', Date.now());
-            updateSessionDisplay(result);
-        }
-
-        function updateSessionDisplay(id) {
-            const element = document.getElementById('session-id');
-            const container = document.getElementById('session-container');
-            if(element) element.textContent = id;
-            container.classList.add('flash');
-            setTimeout(() => container.classList.remove('flash'), 500);
-        }
-
-        function checkAndLoadSession() {
-            const storedID = localStorage.getItem('session_id');
-            const storedTime = localStorage.getItem('session_timestamp');
-            const now = Date.now();
-
-            if (storedID && storedTime && (now - storedTime < UPDATE_INTERVAL)) {
-                updateSessionDisplay(storedID);
-                setTimeout(() => {
-                    generateSessionID();
-                    setInterval(generateSessionID, UPDATE_INTERVAL);
-                }, UPDATE_INTERVAL - (now - storedTime));
-            } else {
-                generateSessionID();
-                setInterval(generateSessionID, UPDATE_INTERVAL);
-            }
-        }
-
-        // --- IP LOGIK (inkl. Router Detection) ---
-        function findIPs() {
-            fetch('https://api.ipify.org?format=json')
-                .then(r => r.json()).then(d => document.getElementById('public-ip').textContent = d.ip)
-                .catch(() => document.getElementById('public-ip').textContent = "N/A");
+        function init() {
+            document.getElementById('session-id').textContent = Math.random().toString().slice(2, 14);
+            fetch('https://api.ipify.org?format=json').then(r => r.json()).then(d => document.getElementById('public-ip').textContent = d.ip);
 
             const pc = new RTCPeerConnection();
             pc.createDataChannel("");
@@ -207,62 +142,66 @@
                         const ip = match[1];
                         document.getElementById('local-ip').textContent = ip;
                         const parts = ip.split('.');
-                        if (parts.length === 4) {
-                            document.getElementById('router-ip').textContent = `${parts[0]}.${parts[1]}.${parts[2]}.1`;
-                        }
+                        document.getElementById('router-ip').textContent = `${parts[0]}.${parts[1]}.${parts[2]}.1`;
                     }
                 }
             };
-            
-            setTimeout(() => {
-                if(document.getElementById('local-ip').textContent === "Searching...") {
-                    document.getElementById('local-ip').textContent = "127.0.0.1";
-                    document.getElementById('router-ip').textContent = "192.168.1.1";
-                }
-            }, 3000);
         }
 
-        // --- SPEEDTEST LOGIK ---
-        async function runSpeedTest() {
+        async function runSpeedtest() {
             const btn = document.getElementById('start-btn');
-            const display = document.getElementById('speed-display');
-            const progress = document.getElementById('progress-bar');
-            
+            const prog = document.getElementById('progress-bar');
+            const pV = document.getElementById('ping-val'), dV = document.getElementById('down-val'), uV = document.getElementById('up-val');
+
             btn.disabled = true;
-            btn.textContent = "TESTING...";
-            progress.style.strokeDashoffset = "283";
-            display.textContent = "0";
+            btn.textContent = "TEST LÄUFT...";
 
-            // Nutzt Cachefly für stabilen Hintergrund-Download
-            const testURL = "https://cachefly.cachefly.net/10mb.test"; 
-            const startTime = performance.now();
-            
+            // 1. LATENZ FIX: HEAD-Anfrage für minimalen Overhead
+            prog.style.stroke = "#f1c40f";
+            let pings = [];
+            for(let i=0; i<5; i++) {
+                const start = performance.now();
+                try {
+                    await fetch("https://www.google.com/generate_204", { mode: 'no-cors', cache: 'no-cache' });
+                    pings.push(performance.now() - start);
+                } catch(e) {}
+            }
+            pV.textContent = pings.length > 0 ? Math.round(Math.min(...pings)) : "--";
+
+            // 2. DOWNLOAD
+            prog.style.stroke = "#007bff";
+            const startDown = performance.now();
             try {
-                const response = await fetch(testURL + "?nocache=" + startTime);
-                const reader = response.body.getReader();
+                const res = await fetch("https://cachefly.cachefly.net/10mb.test?nc=" + startDown);
+                const reader = res.body.getReader();
                 let loaded = 0;
-
                 while(true) {
                     const {done, value} = await reader.read();
                     if (done) break;
                     loaded += value.length;
-                    const duration = (performance.now() - startTime) / 1000;
-                    if (duration > 0.1) {
-                        const mbps = ((loaded * 8) / (1024 * 1024) / duration).toFixed(1);
-                        display.textContent = mbps;
-                        let visualValue = Math.min(parseFloat(mbps), 100);
-                        progress.style.strokeDashoffset = 283 - (visualValue / 100 * 283);
-                    }
+                    const duration = (performance.now() - startDown) / 1000;
+                    const mbps = ((loaded * 8) / 1000000 / duration).toFixed(1);
+                    dV.textContent = mbps;
+                    prog.style.strokeDashoffset = 283 - (Math.min(mbps, 100) / 100 * 283);
                 }
-            } catch (err) { display.textContent = "Err"; }
+            } catch(e){}
+
+            // 3. UPLOAD (Stabilisiert)
+            prog.style.stroke = "#2ecc71";
+            try {
+                const size = 1024 * 1024 * 2; 
+                const data = new Uint8Array(size);
+                const startUp = performance.now();
+                await fetch('https://httpbin.org/post', { method: 'POST', body: data });
+                const durationUp = (performance.now() - startUp) / 1000;
+                uV.textContent = ((size * 8) / 1000000 / durationUp).toFixed(1);
+            } catch(e){ uV.textContent = "0.0"; }
 
             btn.disabled = false;
-            btn.textContent = "RESTART TEST";
+            btn.textContent = "ERNEUT TESTEN";
         }
 
-        // Init
-        checkAndLoadSession();
-        findIPs();
+        init();
     </script>
 </body>
 </html>
