@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>System Diagnostic v4.1</title>
+    <title>System Diagnostic v4.3</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -104,16 +104,16 @@
 
         <div class="results-grid">
             <div class="result-item">
-                <span id="ping-val" class="speed-value ping-text">0</span>
-                <span class="unit">ms LATENZ</span>
-            </div>
-            <div class="result-item">
                 <span id="down-val" class="speed-value down-text">0.0</span>
                 <span class="unit">Mbit/s DN</span>
             </div>
             <div class="result-item">
                 <span id="up-val" class="speed-value up-text">0.0</span>
                 <span class="unit">Mbit/s UP</span>
+            </div>
+            <div class="result-item">
+                <span id="ping-val" class="speed-value ping-text">--</span>
+                <span class="unit">ms PING</span>
             </div>
         </div>
 
@@ -155,20 +155,10 @@
 
             btn.disabled = true;
             btn.textContent = "TEST LÄUFT...";
+            prog.style.strokeDashoffset = "283";
+            pV.textContent = "--";
 
-            // 1. LATENZ FIX: HEAD-Anfrage für minimalen Overhead
-            prog.style.stroke = "#f1c40f";
-            let pings = [];
-            for(let i=0; i<5; i++) {
-                const start = performance.now();
-                try {
-                    await fetch("https://www.google.com/generate_204", { mode: 'no-cors', cache: 'no-cache' });
-                    pings.push(performance.now() - start);
-                } catch(e) {}
-            }
-            pV.textContent = pings.length > 0 ? Math.round(Math.min(...pings)) : "--";
-
-            // 2. DOWNLOAD
+            // 1. DOWNLOAD (Blau)
             prog.style.stroke = "#007bff";
             const startDown = performance.now();
             try {
@@ -186,7 +176,7 @@
                 }
             } catch(e){}
 
-            // 3. UPLOAD (Stabilisiert)
+            // 2. UPLOAD (Grün)
             prog.style.stroke = "#2ecc71";
             try {
                 const size = 1024 * 1024 * 2; 
@@ -196,6 +186,21 @@
                 const durationUp = (performance.now() - startUp) / 1000;
                 uV.textContent = ((size * 8) / 1000000 / durationUp).toFixed(1);
             } catch(e){ uV.textContent = "0.0"; }
+
+            // 3. PING (Gelb) - Jetzt synchronisiert mit derselben Logik
+            prog.style.stroke = "#f1c40f";
+            let pings = [];
+            for(let i=0; i<10; i++) { // Mehr Durchläufe für flüssige Anzeige
+                const start = performance.now();
+                try {
+                    await fetch("https://www.google.com/generate_204", { mode: 'no-cors', cache: 'no-cache' });
+                    const currentPing = performance.now() - start;
+                    pings.push(currentPing);
+                    pV.textContent = Math.round(currentPing); // Live-Update des Pings
+                } catch(e) {}
+                await new Promise(r => setTimeout(r, 100)); // Kleine Pause für Animationseffekt
+            }
+            pV.textContent = Math.round(Math.min(...pings)); // Endgültiger bester Wert
 
             btn.disabled = false;
             btn.textContent = "ERNEUT TESTEN";
