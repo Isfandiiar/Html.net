@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>System Diagnostic v4.3</title>
+    <title>System Diagnostic v4.5</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -26,23 +26,31 @@
             padding: 30px 20px;
         }
 
+        /* Tacho mit Skala */
         .gauge-container {
             position: relative;
-            width: 180px;
-            height: 110px;
+            width: 240px;
+            height: 150px;
             margin: 0 auto 10px;
         }
 
         .gauge-svg { width: 100%; height: 100%; }
-        .gauge-bg { fill: none; stroke: #161b22; stroke-width: 12; stroke-linecap: round; }
+        .gauge-bg { fill: none; stroke: #161b22; stroke-width: 8; stroke-linecap: round; }
         .gauge-progress {
             fill: none;
             stroke: #007bff;
-            stroke-width: 12;
+            stroke-width: 10;
             stroke-linecap: round;
             stroke-dasharray: 283;
             stroke-dashoffset: 283;
-            transition: stroke-dashoffset 0.3s ease;
+            transition: stroke-dashoffset 0.3s ease, stroke 0.3s ease;
+        }
+
+        /* Skalen-Beschriftung */
+        .scale-text {
+            font-size: 10px;
+            fill: #8b949e;
+            font-weight: bold;
         }
 
         .results-grid {
@@ -55,8 +63,8 @@
         }
 
         .result-item { flex: 1; text-align: center; }
-        .speed-value { font-size: 1.6rem; font-weight: bold; display: block; }
-        .unit { font-size: 0.7rem; color: #8b949e; font-weight: 500; }
+        .speed-value { font-size: 1.4rem; font-weight: bold; display: block; }
+        .unit { font-size: 0.65rem; color: #8b949e; font-weight: 500; }
 
         .ping-text { color: #f1c40f; } 
         .down-text { color: #007bff; } 
@@ -68,12 +76,12 @@
             justify-content: center;
             width: 100%;
             margin-bottom: 10px;
-            height: 45px;
+            height: 40px;
             border-radius: 8px;
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             background-color: #161b22;
             color: #007bff;
-            border: 1px solid rgba(0, 123, 255, 0.2);
+            border: 1px solid rgba(0, 123, 255, 0.15);
         }
 
         .btn-action {
@@ -82,9 +90,8 @@
             border: none;
             cursor: pointer;
             font-weight: bold;
-            box-shadow: 0 4px 10px rgba(0, 123, 255, 0.3);
-            margin-bottom: 20px;
             text-transform: uppercase;
+            box-shadow: 0 4px 10px rgba(0, 123, 255, 0.3);
         }
 
         .btn-action:disabled { background-color: #30363d; color: #8b949e; cursor: wait; }
@@ -96,9 +103,17 @@
 
     <div class="card">
         <div class="gauge-container">
-            <svg class="gauge-svg" viewBox="0 0 200 120">
-                <path class="gauge-bg" d="M20,100 A80,80 0 0,1 180,100" />
-                <path id="progress-bar" class="gauge-progress" d="M20,100 A80,80 0 0,1 180,100" />
+            <svg class="gauge-svg" viewBox="0 0 200 140">
+                <path class="gauge-bg" d="M30,110 A75,75 0 0,1 170,110" />
+                <path id="progress-bar" class="gauge-progress" d="M30,110 A75,75 0 0,1 170,110" />
+                
+                <text x="25" y="125" class="scale-text">0</text>
+                <text x="15" y="85" class="scale-text">1</text>
+                <text x="45" y="45" class="scale-text">5</text>
+                <text x="95" y="30" class="scale-text">10</text>
+                <text x="145" y="45" class="scale-text">20</text>
+                <text x="175" y="85" class="scale-text">50</text>
+                <text x="165" y="125" class="scale-text">100+</text>
             </svg>
         </div>
 
@@ -183,24 +198,26 @@
                 const data = new Uint8Array(size);
                 const startUp = performance.now();
                 await fetch('https://httpbin.org/post', { method: 'POST', body: data });
-                const durationUp = (performance.now() - startUp) / 1000;
-                uV.textContent = ((size * 8) / 1000000 / durationUp).toFixed(1);
+                const mbpsUp = ((size * 8) / 1000000 / ((performance.now() - startUp) / 1000)).toFixed(1);
+                uV.textContent = mbpsUp;
+                prog.style.strokeDashoffset = 283 - (Math.min(mbpsUp, 100) / 100 * 283);
             } catch(e){ uV.textContent = "0.0"; }
 
-            // 3. PING (Gelb) - Jetzt synchronisiert mit derselben Logik
+            // 3. PING (Gelb) - Gleiche Geschwindigkeit/Logik wie andere Werte
             prog.style.stroke = "#f1c40f";
             let pings = [];
-            for(let i=0; i<10; i++) { // Mehr Durchläufe für flüssige Anzeige
+            for(let i=0; i<8; i++) {
                 const start = performance.now();
                 try {
                     await fetch("https://www.google.com/generate_204", { mode: 'no-cors', cache: 'no-cache' });
                     const currentPing = performance.now() - start;
                     pings.push(currentPing);
-                    pV.textContent = Math.round(currentPing); // Live-Update des Pings
+                    pV.textContent = Math.round(currentPing);
+                    prog.style.strokeDashoffset = 283 - (Math.min(currentPing, 100) / 100 * 283);
                 } catch(e) {}
-                await new Promise(r => setTimeout(r, 100)); // Kleine Pause für Animationseffekt
+                await new Promise(r => setTimeout(r, 150));
             }
-            pV.textContent = Math.round(Math.min(...pings)); // Endgültiger bester Wert
+            pV.textContent = Math.round(Math.min(...pings));
 
             btn.disabled = false;
             btn.textContent = "ERNEUT TESTEN";
