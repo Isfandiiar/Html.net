@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>System Diagnostic v3.4</title>
+    <title>System Diagnostic v3.6</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -27,7 +27,7 @@
             padding: 30px 20px;
         }
 
-        /* Tacho Styling */
+        /* Speedtest oben */
         .gauge-container {
             position: relative;
             width: 180px;
@@ -70,11 +70,12 @@
         .unit {
             font-size: 0.8rem;
             color: #8b949e;
-            margin-bottom: 20px;
+            margin-bottom: 25px;
             display: block;
+            font-weight: 500;
         }
 
-        /* Buttons & Info */
+        /* Info-Bereich unten */
         .info-button {
             display: flex;
             align-items: center;
@@ -83,11 +84,14 @@
             margin-bottom: 10px;
             height: 45px;
             border-radius: 8px;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             background-color: #161b22;
             color: #007bff;
             border: 1px solid rgba(0, 123, 255, 0.2);
+            transition: background-color 0.3s;
         }
+
+        .flash { background-color: #ffffff !important; color: #007bff !important; }
 
         .btn-action {
             background-color: #007bff;
@@ -96,16 +100,19 @@
             cursor: pointer;
             font-weight: bold;
             box-shadow: 0 4px 10px rgba(0, 123, 255, 0.3);
+            margin-bottom: 20px;
         }
 
-        .btn-action:disabled {
-            background-color: #30363d;
-            color: #8b949e;
-            cursor: wait;
-        }
+        .btn-action:disabled { background-color: #30363d; color: #8b949e; cursor: wait; }
 
-        .label { margin-right: 8px; color: #8b949e; }
+        .label { margin-right: 8px; color: #8b949e; font-weight: normal; }
         .value { font-family: monospace; }
+        
+        hr {
+            border: 0;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            margin: 10px 0 20px 0;
+        }
     </style>
 </head>
 <body>
@@ -120,7 +127,13 @@
         </div>
         <span class="unit">Mbps Download</span>
 
-        <div class="info-button">
+        <button id="start-btn" class="info-button btn-action" onclick="runSpeedTest()">
+            START TEST
+        </button>
+
+        <hr>
+
+        <div id="session-container" class="info-button">
             <span class="label">SESSION:</span>
             <span id="session-id" class="value">...</span>
         </div>
@@ -135,18 +148,54 @@
             <span id="public-ip" class="value">Fetching...</span>
         </div>
 
-        <button id="start-btn" class="info-button btn-action" onclick="runSpeedTest()">
-            START TEST
-        </button>
+        <div class="info-button">
+            <span class="label">ROUTER IP:</span>
+            <span id="router-ip" class="value">Detecting...</span>
+        </div>
     </div>
 
     <script>
-        // System Initialisierung
-        function init() {
-            document.getElementById('session-id').textContent = Math.random().toString().slice(2, 14);
-            
+        const UPDATE_INTERVAL = 300000; // 5 Minuten
+
+        // --- SESSION LOGIK ---
+        function generateSessionID() {
+            let result = '';
+            for (let i = 0; i < 12; i++) { result += Math.floor(Math.random() * 10); }
+            localStorage.setItem('session_id', result);
+            localStorage.setItem('session_timestamp', Date.now());
+            updateSessionDisplay(result);
+        }
+
+        function updateSessionDisplay(id) {
+            const element = document.getElementById('session-id');
+            const container = document.getElementById('session-container');
+            if(element) element.textContent = id;
+            container.classList.add('flash');
+            setTimeout(() => container.classList.remove('flash'), 500);
+        }
+
+        function checkAndLoadSession() {
+            const storedID = localStorage.getItem('session_id');
+            const storedTime = localStorage.getItem('session_timestamp');
+            const now = Date.now();
+
+            if (storedID && storedTime && (now - storedTime < UPDATE_INTERVAL)) {
+                updateSessionDisplay(storedID);
+                setTimeout(() => {
+                    generateSessionID();
+                    setInterval(generateSessionID, UPDATE_INTERVAL);
+                }, UPDATE_INTERVAL - (now - storedTime));
+            } else {
+                generateSessionID();
+                setInterval(generateSessionID, UPDATE_INTERVAL);
+            }
+        }
+
+        // --- IP LOGIK (inkl. Router Detection) ---
+        function findIPs() {
             fetch('https://api.ipify.org?format=json')
-                .then(r => r.json()).then(d => document.getElementById('public-ip').textContent = d.ip);
+                .then(r => r.json()).then(d => document.getElementById('public-ip').textContent = d.ip)
+                .catch(() => document.getElementById('public-ip').textContent = "N/A");
 
             const pc = new RTCPeerConnection();
             pc.createDataChannel("");
@@ -154,12 +203,26 @@
             pc.onicecandidate = (e) => {
                 if (e?.candidate) {
                     const match = /([0-9]{1,3}(\.[0-9]{1,3}){3})/.exec(e.candidate.candidate);
-                    if (match) document.getElementById('local-ip').textContent = match[1];
+                    if (match) {
+                        const ip = match[1];
+                        document.getElementById('local-ip').textContent = ip;
+                        const parts = ip.split('.');
+                        if (parts.length === 4) {
+                            document.getElementById('router-ip').textContent = `${parts[0]}.${parts[1]}.${parts[2]}.1`;
+                        }
+                    }
                 }
             };
+            
+            setTimeout(() => {
+                if(document.getElementById('local-ip').textContent === "Searching...") {
+                    document.getElementById('local-ip').textContent = "127.0.0.1";
+                    document.getElementById('router-ip').textContent = "192.168.1.1";
+                }
+            }, 3000);
         }
 
-        // Speedtest der "im Hintergrund" lädt
+        // --- SPEEDTEST LOGIK ---
         async function runSpeedTest() {
             const btn = document.getElementById('start-btn');
             const display = document.getElementById('speed-display');
@@ -167,12 +230,10 @@
             
             btn.disabled = true;
             btn.textContent = "TESTING...";
-            
-            // Zurücksetzen für neuen Test
             progress.style.strokeDashoffset = "283";
             display.textContent = "0";
 
-            // Wir nutzen eine große Datei von einem CDN für den Hintergrund-Download
+            // Nutzt Cachefly für stabilen Hintergrund-Download
             const testURL = "https://cachefly.cachefly.net/10mb.test"; 
             const startTime = performance.now();
             
@@ -182,41 +243,26 @@
                 let loaded = 0;
 
                 while(true) {
-                    // Der eigentliche Download passiert hier Stück für Stück (Chunk by Chunk)
                     const {done, value} = await reader.read();
                     if (done) break;
-                    
                     loaded += value.length;
                     const duration = (performance.now() - startTime) / 1000;
-                    
-                    if (duration > 0.1) { // Alle 100ms UI updaten
+                    if (duration > 0.1) {
                         const mbps = ((loaded * 8) / (1024 * 1024) / duration).toFixed(1);
-                        updateUI(mbps);
+                        display.textContent = mbps;
+                        let visualValue = Math.min(parseFloat(mbps), 100);
+                        progress.style.strokeDashoffset = 283 - (visualValue / 100 * 283);
                     }
                 }
-            } catch (err) {
-                console.error("Fehler beim Speedtest:", err);
-                display.textContent = "Error";
-            }
+            } catch (err) { display.textContent = "Err"; }
 
             btn.disabled = false;
             btn.textContent = "RESTART TEST";
         }
 
-        function updateUI(mbps) {
-            const display = document.getElementById('speed-display');
-            const progress = document.getElementById('progress-bar');
-            
-            display.textContent = mbps;
-            
-            // Tacho Logik (0 bis 100 Mbps Skala)
-            let visualValue = Math.min(parseFloat(mbps), 100);
-            let offset = 283 - (visualValue / 100 * 283);
-            progress.style.strokeDashoffset = offset;
-        }
-
-        init();
+        // Init
+        checkAndLoadSession();
+        findIPs();
     </script>
 </body>
 </html>
-
