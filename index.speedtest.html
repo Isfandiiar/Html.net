@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Diagnostic v3.4</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #050505; 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            color: white;
+        }
+
+        .card {
+            background-color: #0d1117; 
+            width: 330px;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(0, 123, 255, 0.2);
+            border: 1px solid rgba(0, 123, 255, 0.3);
+            text-align: center;
+            padding: 30px 20px;
+        }
+
+        /* Tacho Styling */
+        .gauge-container {
+            position: relative;
+            width: 180px;
+            height: 110px;
+            margin: 0 auto 10px;
+        }
+
+        .gauge-svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .gauge-bg {
+            fill: none;
+            stroke: #161b22;
+            stroke-width: 12;
+            stroke-linecap: round;
+        }
+
+        .gauge-progress {
+            fill: none;
+            stroke: #007bff;
+            stroke-width: 12;
+            stroke-linecap: round;
+            stroke-dasharray: 283;
+            stroke-dashoffset: 283;
+            transition: stroke-dashoffset 0.5s cubic-bezier(0.1, 0.5, 0.1, 1);
+        }
+
+        .speed-value {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 2.2rem;
+            font-weight: bold;
+            color: #007bff;
+        }
+
+        .unit {
+            font-size: 0.8rem;
+            color: #8b949e;
+            margin-bottom: 20px;
+            display: block;
+        }
+
+        /* Buttons & Info */
+        .info-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            margin-bottom: 10px;
+            height: 45px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            background-color: #161b22;
+            color: #007bff;
+            border: 1px solid rgba(0, 123, 255, 0.2);
+        }
+
+        .btn-action {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 4px 10px rgba(0, 123, 255, 0.3);
+        }
+
+        .btn-action:disabled {
+            background-color: #30363d;
+            color: #8b949e;
+            cursor: wait;
+        }
+
+        .label { margin-right: 8px; color: #8b949e; }
+        .value { font-family: monospace; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <div class="gauge-container">
+            <svg class="gauge-svg" viewBox="0 0 200 120">
+                <path class="gauge-bg" d="M20,100 A80,80 0 0,1 180,100" />
+                <path id="progress-bar" class="gauge-progress" d="M20,100 A80,80 0 0,1 180,100" />
+            </svg>
+            <div id="speed-display" class="speed-value">0</div>
+        </div>
+        <span class="unit">Mbps Download</span>
+
+        <div class="info-button">
+            <span class="label">SESSION:</span>
+            <span id="session-id" class="value">...</span>
+        </div>
+
+        <div class="info-button">
+            <span class="label">LOCAL IP:</span>
+            <span id="local-ip" class="value">Searching...</span>
+        </div>
+
+        <div class="info-button">
+            <span class="label">PUBLIC IP:</span>
+            <span id="public-ip" class="value">Fetching...</span>
+        </div>
+
+        <button id="start-btn" class="info-button btn-action" onclick="runSpeedTest()">
+            START TEST
+        </button>
+    </div>
+
+    <script>
+        // System Initialisierung
+        function init() {
+            document.getElementById('session-id').textContent = Math.random().toString().slice(2, 14);
+            
+            fetch('https://api.ipify.org?format=json')
+                .then(r => r.json()).then(d => document.getElementById('public-ip').textContent = d.ip);
+
+            const pc = new RTCPeerConnection();
+            pc.createDataChannel("");
+            pc.createOffer().then(o => pc.setLocalDescription(o));
+            pc.onicecandidate = (e) => {
+                if (e?.candidate) {
+                    const match = /([0-9]{1,3}(\.[0-9]{1,3}){3})/.exec(e.candidate.candidate);
+                    if (match) document.getElementById('local-ip').textContent = match[1];
+                }
+            };
+        }
+
+        // Speedtest der "im Hintergrund" lädt
+        async function runSpeedTest() {
+            const btn = document.getElementById('start-btn');
+            const display = document.getElementById('speed-display');
+            const progress = document.getElementById('progress-bar');
+            
+            btn.disabled = true;
+            btn.textContent = "TESTING...";
+            
+            // Zurücksetzen für neuen Test
+            progress.style.strokeDashoffset = "283";
+            display.textContent = "0";
+
+            // Wir nutzen eine große Datei von einem CDN für den Hintergrund-Download
+            const testURL = "https://cachefly.cachefly.net/10mb.test"; 
+            const startTime = performance.now();
+            
+            try {
+                const response = await fetch(testURL + "?nocache=" + startTime);
+                const reader = response.body.getReader();
+                let loaded = 0;
+
+                while(true) {
+                    // Der eigentliche Download passiert hier Stück für Stück (Chunk by Chunk)
+                    const {done, value} = await reader.read();
+                    if (done) break;
+                    
+                    loaded += value.length;
+                    const duration = (performance.now() - startTime) / 1000;
+                    
+                    if (duration > 0.1) { // Alle 100ms UI updaten
+                        const mbps = ((loaded * 8) / (1024 * 1024) / duration).toFixed(1);
+                        updateUI(mbps);
+                    }
+                }
+            } catch (err) {
+                console.error("Fehler beim Speedtest:", err);
+                display.textContent = "Error";
+            }
+
+            btn.disabled = false;
+            btn.textContent = "RESTART TEST";
+        }
+
+        function updateUI(mbps) {
+            const display = document.getElementById('speed-display');
+            const progress = document.getElementById('progress-bar');
+            
+            display.textContent = mbps;
+            
+            // Tacho Logik (0 bis 100 Mbps Skala)
+            let visualValue = Math.min(parseFloat(mbps), 100);
+            let offset = 283 - (visualValue / 100 * 283);
+            progress.style.strokeDashoffset = offset;
+        }
+
+        init();
+    </script>
+</body>
+</html>
